@@ -21,6 +21,7 @@ public class Main {
     private static final int NGRAM_SIZE = 3;
 
     private static List<String> db = new ArrayList<>();
+    private static List<String> origDb = new ArrayList<>();
     private static List<String> ngrams = new ArrayList<>();
     private static byte[][] cmm;
 
@@ -57,8 +58,22 @@ public class Main {
             cumul[i] += cmm[ngramId][i];
         }
 
+        int maxSoFarCount = 0;
+        List<Integer> maxSoFarNums = new ArrayList<>();
         for (int i = 0; i < cmm[ngramId].length; i++) {
-            System.out.println(cumul[i]);
+            if (cumul[i] == maxSoFarCount) {
+                maxSoFarNums.add(i);
+            }
+            else if (cumul[i] > maxSoFarCount) {
+                maxSoFarNums.clear();
+                maxSoFarNums.add(i);
+                maxSoFarCount = cumul[i];
+            }
+        }
+
+        Object[] dbArr = origDb.toArray();
+        for (int address : maxSoFarNums) {
+            System.out.println(dbArr[address]);
         }
     }
 
@@ -96,6 +111,7 @@ public class Main {
         Path dbPath = FileSystems.getDefault().getPath(DB_PATH);
         List<String> dbLines = Files.readAllLines(dbPath, Charset.forName(DB_CHARSET));
         for (String line : dbLines) {
+            origDb.add(line);
             db.add(line.replace(" ", ""));
         }
     }
