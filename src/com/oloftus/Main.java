@@ -42,13 +42,15 @@ public class Main {
             while (true) {
                 System.out.print("Ready for input: ");
 
-                String address = scanner.nextLine().replace(" ", "").toUpperCase();
+                String address = scanner.nextLine();
                 processInput(address);
             }
         }
     }
 
     private static void processInput(String address) {
+
+        address = normaliseAddress(address);
 
         if (address.length() < NGRAM_SIZE) {
             System.out.println("Please enter at least " + NGRAM_SIZE + " characters\n");
@@ -59,13 +61,11 @@ public class Main {
         for (int ngramWindow = 0; ngramWindow + NGRAM_SIZE <= address.length(); ngramWindow++) {
             String ngram = address.substring(ngramWindow, ngramWindow + NGRAM_SIZE);
 
-            try {
-                ngramIds.add(ngramId(ngram));
-            }
-            catch (IllegalArgumentException e) {
+            if (!validateNgram(ngram)) {
                 System.out.println("Illegal character entered. Legal characters are: " + PERMITTED_CHARS_STR + "\n");
                 return;
             }
+            ngramIds.add(ngramId(ngram));
         }
 
         Integer[] ngramIdsArr = new Integer[ngramIds.size()];
@@ -121,23 +121,39 @@ public class Main {
         cmm = new boolean[NUM_NGRAMS][pafDb.length];
 
         for (int addressId = 0; addressId < pafDb.length; addressId++) {
-            String address = pafDb[addressId].replace(" ", "");
+            String address = normaliseAddress(pafDb[addressId]);
 
             for (int ngramWindow = 0; ngramWindow + NGRAM_SIZE <= address.length(); ngramWindow++) {
                 String ngram = address.substring(ngramWindow, ngramWindow + NGRAM_SIZE);
 
-                int ngramId;
-                try {
-                    ngramId = ngramId(ngram);
-                }
-                catch (IllegalArgumentException e) {
+                if (!validateNgram(ngram)) {
                     System.out.println(ngram);
                     throw new Exception("Illegal character in the PAF. Legal characters are: " + PERMITTED_CHARS_STR);
                 }
 
+                int ngramId = ngramId(ngram);
+
                 cmm[ngramId][addressId] = true;
             }
         }
+    }
+
+    private static String normaliseAddress(String address) {
+
+        return address.replace(" ", "").toUpperCase();
+    }
+
+    private static boolean validateNgram(String ngram) {
+
+        for (int pos = 0; pos < NGRAM_SIZE; pos++) {
+            String character = ngram.substring(pos, pos + 1);
+            Integer charIndex = PERMITTED_CHAR_INDEXES.get(character);
+            if (charIndex == null) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static int ngramId(String ngram) {
