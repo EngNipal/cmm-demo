@@ -42,41 +42,50 @@ public class Main {
             while (true) {
                 System.out.print("Ready for input: ");
 
-                String ngram = scanner.nextLine().replace(" ", "").toUpperCase();
-                processInput(ngram);
+                String address = scanner.nextLine().replace(" ", "").toUpperCase();
+                processInput(address);
             }
         }
     }
 
-    private static void processInput(String ngram) {
+    private static void processInput(String address) {
 
-        if (ngram.length() < NGRAM_SIZE) {
+        if (address.length() < NGRAM_SIZE) {
             System.out.println("Please enter at least " + NGRAM_SIZE + " characters\n");
             return;
         }
 
-        int ngramId;
-        try {
-            ngramId = ngramId(ngram);
-        }
-        catch (IllegalArgumentException e) {
-            System.out.println("Illegal character entered. Legal characters are: " + PERMITTED_CHARS_STR + "\n");
-            return;
+        List<Integer> ngramIds = new ArrayList<>();
+        for (int ngramWindow = 0; ngramWindow + NGRAM_SIZE <= address.length(); ngramWindow++) {
+            String ngram = address.substring(ngramWindow, ngramWindow + NGRAM_SIZE);
+
+            try {
+                ngramIds.add(ngramId(ngram));
+            }
+            catch (IllegalArgumentException e) {
+                System.out.println("Illegal character entered. Legal characters are: " + PERMITTED_CHARS_STR + "\n");
+                return;
+            }
         }
 
-        findMatchingAddresses(ngramId);
+        Integer[] ngramIdsArr = new Integer[ngramIds.size()];
+        ngramIds.toArray(ngramIdsArr);
+        findMatchingAddresses(ngramIdsArr);
     }
 
-    private static void findMatchingAddresses(int ngramId) {
+    private static void findMatchingAddresses(Integer... ngramIds) {
 
         byte[] addressNgramSum = new byte[pafDb.length];
-        for (int i = 0; i < cmm[ngramId].length; i++) {
-            addressNgramSum[i] += cmm[ngramId][i] ? 1 : 0;
+
+        for (int ngramId : ngramIds) {
+            for (int i = 0; i < pafDb.length; i++) {
+                addressNgramSum[i] += cmm[ngramId][i] ? 1 : 0;
+            }
         }
 
         int maxAddressNgramCount = 0;
         List<Integer> mostLikelyAddresses = new ArrayList<>();
-        for (int i = 0; i < cmm[ngramId].length; i++) {
+        for (int i = 0; i < pafDb.length; i++) {
             if (addressNgramSum[i] == maxAddressNgramCount) {
                 mostLikelyAddresses.add(i);
             }
