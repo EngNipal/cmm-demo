@@ -1,7 +1,5 @@
 package com.oloftus;
 
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -9,126 +7,150 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Scanner;
 
 public class Main {
 
+    private static final String DB_FILENAME = "paf.txt";
     private static final String DB_CHARSET = "ASCII";
-    private static final String DB_PATH = "/Users/oloftus/Desktop/addresses.txt";
-    private static final String[] PERMITTED_CHARS = "A B C D E F G H I J K L M N O P Q R S T U V W X Y Z 1 2 3 4 5 6 7 8 9 0"
-            .split(" ");
+    private static final Map<String, Integer> PERMITTED_CHAR_INDEXES;
+    private static final String PERMITTED_CHARS_STR = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890";
+    private static final String[] PERMITTED_CHARS = PERMITTED_CHARS_STR.split("");
     private static final int NGRAM_SIZE = 3;
+    private static final int NUM_NGRAMS = (int) Math.pow(PERMITTED_CHARS.length, NGRAM_SIZE);
 
-    private static List<String> db = new ArrayList<>();
-    private static List<String> origDb = new ArrayList<>();
-    private static List<String> ngrams = new ArrayList<>();
-    private static byte[][] cmm;
+    private static boolean[][] cmm;
+    private static String[] pafDb;
 
-    public static int charIx(String chara) {
+    static {
+
+        PERMITTED_CHAR_INDEXES = new HashMap<>();
 
         for (int i = 0; i < PERMITTED_CHARS.length; i++) {
-            if (PERMITTED_CHARS[i].equals(chara)) {
-                return i;
+            PERMITTED_CHAR_INDEXES.put(PERMITTED_CHARS[i], i);
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+
+        processPaf();
+
+        try (Scanner scanner = new Scanner(System.in)) {
+            while (true) {
+                System.out.print("Ready for input: ");
+
+                String ngram = scanner.nextLine().replace(" ", "").toUpperCase();
+                processInput(ngram);
+            }
+        }
+    }
+
+    private static void processInput(String ngram) {
+
+        if (ngram.length() < NGRAM_SIZE) {
+            System.out.println("Please enter at least " + NGRAM_SIZE + " characters\n");
+            return;
+        }
+
+        int ngramId;
+        try {
+            ngramId = ngramId(ngram);
+        }
+        catch (IllegalArgumentException e) {
+            System.out.println("Illegal character entered. Legal characters are: " + PERMITTED_CHARS_STR + "\n");
+            return;
+        }
+
+        findMatchingAddresses(ngramId);
+    }
+
+    private static void findMatchingAddresses(int ngramId) {
+
+        byte[] addressNgramSum = new byte[pafDb.length];
+        for (int i = 0; i < cmm[ngramId].length; i++) {
+            addressNgramSum[i] += cmm[ngramId][i] ? 1 : 0;
+        }
+
+        int maxAddressNgramCount = 0;
+        List<Integer> mostLikelyAddresses = new ArrayList<>();
+        for (int i = 0; i < cmm[ngramId].length; i++) {
+            if (addressNgramSum[i] == maxAddressNgramCount) {
+                mostLikelyAddresses.add(i);
+            }
+            else if (addressNgramSum[i] > maxAddressNgramCount) {
+                mostLikelyAddresses.clear();
+                mostLikelyAddresses.add(i);
+                maxAddressNgramCount = addressNgramSum[i];
             }
         }
 
-        return -1;
+        if (maxAddressNgramCount == 0) {
+            System.out.println("No addresses found\n");
+            return;
+        }
+
+        System.out.println(mostLikelyAddresses.size() + " addresses found:");
+        for (int address : mostLikelyAddresses) {
+            System.out.println(pafDb[address]);
+        }
+        System.out.println("");
     }
 
-    public static void main(String[] args) throws IOException {
+    private static void processPaf() throws FileNotFoundException, IOException, Exception {
 
-        makeNGrams();
-        normaliseDb();
-        makeCmm();
+        System.out.print("Processing PAF... ");
+        readPaf();
         populateCmm();
+        System.out.println("DONE");
+    }
 
-        Scanner scanner = new Scanner(System.in);
-        String ngram = scanner.nextLine().replace(" ", "");
+    private static void populateCmm() throws Exception {
+
+        cmm = new boolean[NUM_NGRAMS][pafDb.length];
+
+        for (int addressId = 0; addressId < pafDb.length; addressId++) {
+            String address = pafDb[addressId].replace(" ", "");
+
+            for (int ngramWindow = 0; ngramWindow + NGRAM_SIZE <= address.length(); ngramWindow++) {
+                String ngram = address.substring(ngramWindow, ngramWindow + NGRAM_SIZE);
+
+                int ngramId;
+                try {
+                    ngramId = ngramId(ngram);
+                }
+                catch (IllegalArgumentException e) {
+                    System.out.println(ngram);
+                    throw new Exception("Illegal character in the PAF. Legal characters are: " + PERMITTED_CHARS_STR);
+                }
+
+                cmm[ngramId][addressId] = true;
+            }
+        }
+    }
+
+    private static int ngramId(String ngram) {
 
         int ngramId = 0;
-        for (int j = 0; j < NGRAM_SIZE; j++) {
-            int charIx = charIx(ngram.substring(j, j + 1));
-            ngramId += charIx * Math.pow(PERMITTED_CHARS.length, (NGRAM_SIZE - j - 1));
-        }
-
-        byte[] cumul = new byte[db.size()];
-
-        for (int i = 0; i < cmm[ngramId].length; i++) {
-            cumul[i] += cmm[ngramId][i];
-        }
-
-        int maxSoFarCount = 0;
-        List<Integer> maxSoFarNums = new ArrayList<>();
-        for (int i = 0; i < cmm[ngramId].length; i++) {
-            if (cumul[i] == maxSoFarCount) {
-                maxSoFarNums.add(i);
+        for (int pos = 0; pos < NGRAM_SIZE; pos++) {
+            String character = ngram.substring(pos, pos + 1);
+            Integer charIndex = PERMITTED_CHAR_INDEXES.get(character);
+            if (charIndex == null) {
+                throw new IllegalArgumentException("Illegal character");
             }
-            else if (cumul[i] > maxSoFarCount) {
-                maxSoFarNums.clear();
-                maxSoFarNums.add(i);
-                maxSoFarCount = cumul[i];
-            }
+            ngramId += charIndex * Math.pow(PERMITTED_CHARS.length, (NGRAM_SIZE - pos - 1));
         }
 
-        Object[] dbArr = origDb.toArray();
-        for (int address : maxSoFarNums) {
-            System.out.println(dbArr[address]);
-        }
+        return ngramId;
     }
 
-    private static void populateCmm() {
+    private static void readPaf() throws FileNotFoundException, IOException {
 
-        int lineNum = 0;
-        for (String line : db) {
-            for (int i = 0; i + NGRAM_SIZE <= line.length(); i++) {
-                String ngram = line.substring(i, i + NGRAM_SIZE);
-
-                int ngramId = 0;
-                for (int j = 0; j < NGRAM_SIZE; j++) {
-                    int charIx = charIx(ngram.substring(j, j + 1));
-                    ngramId += charIx * Math.pow(PERMITTED_CHARS.length, (NGRAM_SIZE - j - 1));
-                }
-                cmm[ngramId][lineNum] = 1;
-                // System.out.println(ngram + "-" + ngramId);
-            }
-
-            lineNum++;
-        }
-    }
-
-    private static void makeCmm() {
-
-        // [Rows][Cols]
-        cmm = new byte[ngrams.size()][db.size()]; // Rows: Ngrams Cols:
-                                                  // Addresses
-    }
-
-    private static void normaliseDb() throws FileNotFoundException, IOException {
-
-        File dbFile = new File(DB_PATH);
-        FileInputStream fs = new FileInputStream(dbFile);
-        Path dbPath = FileSystems.getDefault().getPath(DB_PATH);
-        List<String> dbLines = Files.readAllLines(dbPath, Charset.forName(DB_CHARSET));
-        for (String line : dbLines) {
-            origDb.add(line);
-            db.add(line.replace(" ", ""));
-        }
-    }
-
-    private static void makeNGrams() {
-
-        int pcl = PERMITTED_CHARS.length;
-
-        for (int i = 0; i < pcl; i++) {
-            String char1 = PERMITTED_CHARS[i];
-            for (int j = 0; j < pcl; j++) {
-                String char2 = PERMITTED_CHARS[j];
-                for (int k = 0; k < pcl; k++) {
-                    String char3 = PERMITTED_CHARS[k];
-                    ngrams.add(char1 + char2 + char3);
-                }
-            }
-        }
+        Path dbPath = FileSystems.getDefault().getPath(DB_FILENAME);
+        List<String> lines = Files.readAllLines(dbPath, Charset.forName(DB_CHARSET));
+        pafDb = new String[lines.size()];
+        lines.toArray(pafDb);
     }
 }
