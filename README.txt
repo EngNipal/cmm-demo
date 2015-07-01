@@ -1,3 +1,4 @@
-Olivers-MacBook-Pro:bin oloftus$ pwd
-/Users/oloftus/Software/Projects/cmm-demo/bin
-Olivers-MacBook-Pro:bin oloftus$ java -cp . com.oloftus.Main
+TO RUN SOFTWARE
+
+Ensure currently directory is: cmm-demo/bin
+$ java -cp . com.oloftus.Main
